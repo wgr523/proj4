@@ -53,7 +53,7 @@ class RHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if self.path.startswith('/kv'):
-            f = self.simple_post()
+            f = self.kv_post()
             try:
                 self.copyfile(f, self.wfile)
             finally:
@@ -74,7 +74,7 @@ class RHandler(BaseHTTPRequestHandler):
     
     def simple_get(self):
         if self.path == '/kvman/shutdown':
-            pass
+            pass # need to be implemented
 
         if self.path == '/kvman/countkey':
             with garage.mutex:
@@ -84,11 +84,11 @@ class RHandler(BaseHTTPRequestHandler):
             with garage.mutex:
                 f = self.dict2file(garage.dump())
             return f
-        if self.path == '/kvman/gooddump':
-            with garage.mutex:
-                f = self.str2file('{"main_mem": '+json.dumps(garage.main_mem)+', "time_stamp": "'+str(garage.get_time_stamp())+'"}')
-                garage.clear_fail_backup()
-            return f
+#        if self.path == '/kvman/gooddump':
+#            with garage.mutex:
+#                f = self.str2file('{"main_mem": '+json.dumps(garage.main_mem)+', "time_stamp": "'+str(garage.get_time_stamp())+'"}')
+#                garage.clear_fail_backup()
+#            return f
         if self.path == '/':
             return self.str2file('Test<br>Client address: '+str(self.client_address)+'<br>Thread: '+threading.currentThread().getName())
         pattern = re.compile('/kv/get\?key=(?P<the_key>.+)')
@@ -118,16 +118,17 @@ class RHandler(BaseHTTPRequestHandler):
         return ret
     
     def paxos_post(self):
-        if self.path == '/paxos/start':
-            self.server.px.start('some value')
-        elif self.path == '/paxos/propose' or self.path == '/paxos/promise' or self.path == '/paxos/accept' or self.path == '/paxos/ack' or self.path == '/paxos/commit':
+        if self.path == '/paxos/propose' or self.path == '/paxos/promise' or self.path == '/paxos/accept' or self.path == '/paxos/ack' or self.path == '/paxos/commit':
             inputs = self.process_post_data()
-            msg=[None] * len(inputs)
+            msg=[None] * (len(inputs)-1) #cuz we have seq that is not in msg
+            seq=None
             for tmpstr in inputs:
                 tmpinput = tmpstr.split('=')
                 if tmpinput[0].startswith('msg'):
                     tmpi = int(tmpinput[0][3:])
                     msg[tmpi] = unquote_plus(tmpinput[1]) # strip msg0=
+                elif tmpinput[0]=='seq' and tmpinput[1].isdecimal():
+                    seq=int(tmpinput[1])
             if msg[0]=='propose':
                 msg[1]=int(msg[1])
                 msg[2]=int(msg[2])
@@ -143,12 +144,12 @@ class RHandler(BaseHTTPRequestHandler):
                 msg[2]=int(msg[2])
             elif msg[0]=='commit':
                 msg[1]=int(msg[1])
-            self.server.px.receive(msg)
-#if self.path == '/paxos/propose':
+            self.server.px.receive(msg,seq)
     
-    def simple_post(self):
+    def kv_post(self):
         the_key=None
         the_value=None
+        the_requestid=None
         inputs = self.process_post_data()
         for tmpstr in inputs:
             tmpinput = tmpstr.split('=')
@@ -156,8 +157,25 @@ class RHandler(BaseHTTPRequestHandler):
                 the_key=unquote_plus(tmpinput[1])
             elif tmpinput[0]=='value':
                 the_value=unquote_plus(tmpinput[1])
-        #print(str(data))
-        #print('the key and value are',the_key,the_value)
+            elif tmpinput[0]=='requestid':
+                the_requestid=unquote_plus(tmpinput[1])
+        if self.path == '/kv/insert':
+            if the_key and the_value:
+                payload={'action':'insert','key':the_key,'value':the_value,'requestid':the_requestid}
+                px = self.server.px
+                while True:
+                    seq = px.get_max()+1
+                    px.start(json.dumps(payload),seq)
+                    # wait for finish
+                    timeslp=0.01
+                    tmp_status = px.kv_status(seq)
+                    while tmp_status is None:
+                        time.sleep(timeslp) # something like timeout
+                        if timeslp<1.0:
+                            timeslp*=2
+                        tmp_status = px.kv_status(seq)
+                    ret = tmp_status and px.action_status(seq)
+                    return self.str2file('{"success":"'+str(ret).lower()+'"}')
         return self.str2file('{"success":"false"}')
 
     def copyfile(self, source, outputfile):

@@ -13,7 +13,7 @@ class MessageHandler(object):
     accepted_value = None # v_a
     promises_received = None
     acks_received = None
-    haha_value = 'value' # default value we want to agree on
+    potential_value = None # default value we want to agree on
     highest_buf = -1
     value_buf = None
 
@@ -22,17 +22,15 @@ class MessageHandler(object):
         self.total_size = total_size
         self.quorum_size = (total_size)//2+1
 
-    def set_value(self,v):
-        self.haha_value = v
     
-    def propose(self):
+    def propose(self, v='failure value'):
         self.leader              = False
         self.promises_received   = set()
         self.proposal_id         = self.choose_n()
-        #self.highest_proposal_id = self.proposal_id # this may be useless
+        #self.highest_proposal_id = self.proposal_id # this may be useless cuz I'll send msg to my self via function call
         self.highest_buf = -1
         self.value_buf = None
-        #self.current_prepare_msg = (self.network_uid, self.proposal_id)
+        self.potential_value = v
         return 'propose',self.network_uid, self.proposal_id
 
     def promise(self,msg):
@@ -56,9 +54,10 @@ class MessageHandler(object):
             self.leader = True
             self.commiter = False
             self.acks_received = set()
-            self.proposal_value=self.value_buf
-            if not self.proposal_value:
-                self.proposal_value=self.haha_value
+            if self.value_buf:
+                self.proposal_value = self.value_buf
+            else:
+                self.proposal_value = self.potential_value
             return 'accept',self.network_uid, self.proposal_id, self.proposal_value
 
     def ack(self,msg):
