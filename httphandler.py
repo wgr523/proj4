@@ -10,6 +10,7 @@ import threading
 import json
 import xmlrpc.client
 from urllib.parse import unquote_plus
+from urllib.parse import urlparse
 import requests
 import collections
 
@@ -33,9 +34,6 @@ class RHandler(BaseHTTPRequestHandler):
     """
 #self.server
     server_version = "GeruiHTTP/0.0.4"
-    backup_address = None
-    backup_port = None
-    proxy = None
 
     def do_GET(self):
         """Serve a GET request."""
@@ -91,17 +89,37 @@ class RHandler(BaseHTTPRequestHandler):
 #            return f
         if self.path == '/':
             return self.str2file('Test<br>Client address: '+str(self.client_address)+'<br>Thread: '+threading.currentThread().getName())
-        pattern = re.compile('/kv/get\?key=(?P<the_key>.+)')
-        m = pattern.match(self.path)
-        if m:
-            the_key = m.group('the_key')
-            the_key = unquote_plus(the_key)
-            rw_lock = garage.get_rw_create(the_key)
-            rw_lock.before_read()
-            ret = garage.get(the_key)
-            f = self.str2file('{"success":"'+str(ret[0]).lower()+'","value":'+json.dumps(ret[1])+'}')
-            rw_lock.after_read()
-            return f
+        p = urlparse(self.path)
+        #pattern = re.compile('/kv/get\?key=(?P<the_key>.+)')
+        #m = pattern.match(self.path)
+        if p.path == '/kv/get':
+            the_key = None
+            the_requestid = None
+            #the_key = m.group('the_key')
+            for tmpstr in p.query.split('&'):
+                tmpinput = tmpstr.split('=')
+                if tmpinput[0]=='key':
+                    the_key = unquote_plus(tmpinput[1])
+                elif tmpinput[0]=='requestid':
+                    the_requestid=unquote_plus(tmpinput[1])
+            if the_key:
+                payload={'action':'get','key':the_key,'requestid':the_requestid}
+                px = self.server.px
+                while True:
+                    seq = px.get_max()+1
+                    px.start(json.dumps(payload),seq)
+                    # wait for finish
+                    timeslp=0.01
+                    tmp_status = px.kv_status(seq)
+                    while tmp_status is None:
+                        time.sleep(timeslp) # something like timeout
+                        if timeslp<1.0:
+                            timeslp*=2
+                        tmp_status = px.kv_status(seq)
+                    ret = [None,None]
+                    ret[0] = px.action_status(seq) and tmp_status[0] # note that tmp_status might not be in format of get
+                    ret[1] = tmp_status[1]
+                    return  self.str2file('{"success":"'+str(ret[0]).lower()+'","value":'+json.dumps(ret[1])+'}')
         return self.str2file('{"success":"false"}')
 
     def process_post_data(self):
@@ -174,7 +192,7 @@ class RHandler(BaseHTTPRequestHandler):
                         if timeslp<1.0:
                             timeslp*=2
                         tmp_status = px.kv_status(seq)
-                    ret = tmp_status and px.action_status(seq)
+                    ret = px.action_status(seq) and tmp_status # note tmp_status may not be insert's result
                     return self.str2file('{"success":"'+str(ret).lower()+'"}')
         return self.str2file('{"success":"false"}')
 
