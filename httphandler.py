@@ -163,6 +163,27 @@ class RHandler(BaseHTTPRequestHandler):
             elif msg[0]=='commit':
                 msg[1]=int(msg[1])
             self.server.px.receive(msg,seq)
+        elif self.path == '/paxos/done/ask':
+            inputs = self.process_post_data()
+            asker=None
+            for tmpstr in inputs:
+                tmpinput = tmpstr.split('=')
+                if tmpinput[0] == 'asker':
+                    asker = int(tmpinput[1])
+            px = self.server.px
+            px.answer_done(asker)
+        elif self.path == '/paxos/done/answer':
+            inputs = self.process_post_data()
+            answerer=None
+            lo=None
+            for tmpstr in inputs:
+                tmpinput = tmpstr.split('=')
+                if tmpinput[0] == 'answerer':
+                    answerer = int(tmpinput[1])
+                elif tmpinput[0] == 'min':
+                    lo = int(tmpinput[1])
+            px = self.server.px
+            px.receive_done(lo,answerer)
     
     def kv_post(self):
         the_key=None

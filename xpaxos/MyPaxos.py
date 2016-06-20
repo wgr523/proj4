@@ -19,6 +19,7 @@ class MyPaxos(object):
     mutex = threading.RLock()
     lo_mutex = threading.RLock()
     lo_buf = 0
+    peer_buf = set()
     def __init__(self, peers, me):
         self.peers = peers
         self.size = len(peers)
@@ -57,6 +58,7 @@ class MyPaxos(object):
         cnt=0
         while not msghdl.decided_value and not self.dead:
             cnt+=1
+            '''do we need a round test? like > 10 rounds, we just return fail?'''
             print('seq '+str(seq)+'. proposer round '+str(cnt))
             reply = msghdl.propose(v)
             self.receive(reply,seq) # special case for send msg to itself, do we need new thread here?
@@ -70,18 +72,19 @@ class MyPaxos(object):
                     except:
                         print(str(i)+' deny me')
             timeslp=0.01
-            for tmpcnt in range(8):
+            for tmpcnt in range(7):
                 if msghdl.decided_value or self.dead:
                     break
                 time.sleep(timeslp) # something like timeout
                 timeslp*=2
         print('As leader, Agree on '+msghdl.decided_value)
+        '''done, collect garbage'''
+        self.done(seq-1)
 
     def receive(self,msg,seq):
-        flag_to_catch_up = seq > self.get_max()+1, self.get_max()+1, seq
+        flag_to_catch_up = self.get_max()+1, seq
         self.allocate_sequence(seq)
-        if flag_to_catch_up[0]:
-            self.catchup_sequence(flag_to_catch_up[1],flag_to_catch_up[2])
+        self.catchup_sequence(flag_to_catch_up[0],flag_to_catch_up[1])
         with self.mutex:
             msghdl = self.sequence[seq]
         if not msghdl:
@@ -197,25 +200,46 @@ class MyPaxos(object):
 #                self.lo=i
 #                break
         with self.lo_mutex:
-            ret = self.lo
+            ret = self.lo_buf
         return ret
     def done(self,seq):
         with self.lo_mutex:
             if self.lo < seq+1:
                 self.lo=seq+1
-            #self.lo_buf = self.lo
+            self.lo_buf = self.lo
+            self.peer_buf = set([self.me])
         for i in range(self.size):
             if self.me != i:
                 url=self.peers[i]+'/paxos/done/ask'
                 try:
                     print(str(self.me)+' send a done number ask to '+str(i))
-                    requests.post(url,data={})
+                    requests.post(url,data={'asker':self.me})
                 except:
                     print(str(i)+' deny me')
-    def receive_done(self,lo):
+    def answer_done(self,asker):
         with self.lo_mutex:
-            if lo<self.lo:
-                self.lo = lo
+            ret = self.lo
+        url=self.peers[asker]+'/paxos/done/answer'
+        payload={'answerer':self.me,'min':ret}
+        try:
+            print(str(self.me)+' send a done number answer to '+str(asker)+', value is '+str(ret))
+            requests.post(url,data=payload)
+        except:
+            print(str(asker)+' deny me')
+    def receive_done(self,lo,answerer):
+        with self.lo_mutex:
+            self.peer_buf.add(answerer)
+            if lo<self.lo_buf:
+                self.lo_buf = lo
+            if len(self.peer_buf) == self.size:
+                for i in range(self.lo_buf-1,-1,-1):
+                    if not self.sequence[i]:
+                        break
+                    self.sequence[i]=None
+                    print('trash seq='+str(i))
+                gc.collect()
+#                if i >= len(self.sequence):
+#                    break
 #            for i in range(seq+1):
 #                if i >= len(self.sequence):
 #                    break
