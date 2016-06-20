@@ -3,8 +3,9 @@ mutex = threading.RLock()
 lock_mem = {}
 
 main_mem = {}
-bool_mem = set()
 
+requestid_mutex = threading.RLock()
+requestid_mem = set()
 class RWOne:
     def __init__(self,key):
         self.key=key
@@ -81,16 +82,16 @@ def dump():
 def set_main_mem(_main_mem):
     main_mem.clear()
     main_mem.update(_main_mem)
-#def success_backup(key):
-#    bool_mem[key]=True
-def fail_backup(key): # success in primary, fail in backup
-    bool_mem.add(key)
-def fail_in_backup(key): # success in backup?
-    return key in bool_mem
-def delete_fail_backup(key):
-    if key in bool_mem:
-        bool_mem.remove(key)
-def list_fail_backup():
-    return list(bool_mem)
-def clear_fail_backup():
-    bool_mem.clear()
+def request_id_test(rid):
+    if rid is None:
+        return True
+    with requestid_mutex:
+        if rid not in requestid_mem:
+            ret = True
+        else:
+            ret = False
+    return ret
+def request_id_add(rid):
+    if rid:
+        with requestid_mutex:
+            requestid_mem.add(rid)

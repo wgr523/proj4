@@ -37,7 +37,8 @@ class MyPaxos(object):
             t=threading.Thread(target = self.start, args=('(this should not be agreed)',i) )
             t.start()
             t.join() # correct?
-        self.done(end-1)
+        if beg<end:
+            self.done(end-1)
     def kill(self):
         self.dead = True
     def deal_with_msg(self,msg,seq):
@@ -204,6 +205,8 @@ class MyPaxos(object):
             ret = self.lo_buf
         return ret
     def done(self,seq):
+        if seq%10!=9:
+            return
         with self.lo_mutex:
             l1=self.lo
         for i in range(l1,seq+1):

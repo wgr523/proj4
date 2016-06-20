@@ -3,6 +3,7 @@ import unittest
 import os
 from time import sleep
 import xpaxos
+import threading
 def parse_output(r,k):
     if not r or not r.text:
         return None
@@ -32,13 +33,20 @@ class TestStringMethods(unittest.TestCase):
             payload['msg'+str(cnt)]=i
             cnt+=1
         print(payload)
+    def todo(self, url, key, value):
+        try:
+            requests.post(url,data={'key': key, 'value': value})
+        except:
+            pass
 
     def testinsert(self):
+        tt=[]
         for i in range(21):
-            try:
-                requests.post(self.url+str(self.port+(i%3))+self.path_insert,data={'key': str(i+1), 'value': '_'})
-            except:
-                pass
+            t=threading.Thread(target=self.todo,args=(self.url+str(self.port+(i%3))+self.path_insert,str(i+1), '_'))
+            t.start()
+            tt.append(t)
+        for t in tt:
+            t.join()
 
     def paxos(self):
         m=xpaxos.MessageHandler.MessageHandler(0,2)

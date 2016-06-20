@@ -92,14 +92,13 @@ class RHandler(BaseHTTPRequestHandler):
         if p.path == '/kv/get':
             the_key = None
             the_requestid = None
-            #the_key = m.group('the_key')
             for tmpstr in p.query.split('&'):
                 tmpinput = tmpstr.split('=')
                 if tmpinput[0]=='key':
                     the_key = unquote_plus(tmpinput[1])
                 elif tmpinput[0]=='requestid':
                     the_requestid=unquote_plus(tmpinput[1])
-            if the_key:
+            if garage.request_id_test(the_requestid) and the_key:
                 payload={'action':'get','key':the_key,'requestid':the_requestid}
                 px = self.server.px
                 while True:
@@ -118,6 +117,7 @@ class RHandler(BaseHTTPRequestHandler):
                     if action_status:
                         ret[0] = tmp_status[0] # note that tmp_status might not be in format of get, thus we need action_status
                         ret[1] = tmp_status[1]
+                        garage.request_id_add(the_requestid)
                         return  self.str2file('{"success":"'+str(ret[0]).lower()+'","value":'+json.dumps(ret[1])+'}')
         return self.str2file('{"success":"false"}')
 
@@ -198,7 +198,7 @@ class RHandler(BaseHTTPRequestHandler):
             elif tmpinput[0]=='requestid':
                 the_requestid=unquote_plus(tmpinput[1])
         if self.path == '/kv/insert':
-            if the_key and the_value:
+            if garage.request_id_test(the_requestid) and the_key and the_value:
                 payload={'action':'insert','key':the_key,'value':the_value,'requestid':the_requestid}
                 px = self.server.px
                 while True:
@@ -215,6 +215,7 @@ class RHandler(BaseHTTPRequestHandler):
                     action_status = px.action_status(seq)
                     if action_status:
                         ret = tmp_status # note tmp_status may not be insert's result
+                        garage.request_id_add(the_requestid)
                         return self.str2file('{"success":"'+str(ret).lower()+'"}')
         return self.str2file('{"success":"false"}')
 
