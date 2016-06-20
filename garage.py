@@ -4,8 +4,6 @@ lock_mem = {}
 
 main_mem = {}
 bool_mem = set()
-time_stamp = [0] # how to use it? use time_stamp[0]
-time_mutex = threading.RLock()
 
 class RWOne:
     def __init__(self,key):
@@ -80,10 +78,6 @@ def countkey():
     return len(main_mem)
 def dump():
     return main_mem
-def get_time_stamp():
-    return time_stamp[0]
-def set_time_stamp(t):
-    time_stamp[0] = t
 def set_main_mem(_main_mem):
     main_mem.clear()
     main_mem.update(_main_mem)

@@ -74,24 +74,21 @@ class RHandler(BaseHTTPRequestHandler):
         if self.path == '/kvman/shutdown':
             pass # need to be implemented
 
-        if self.path == '/kvman/countkey':
+        elif self.path == '/kvman/countkey':
             with garage.mutex:
                 f = self.str2file('{"result": "'+str(garage.countkey())+'"}')
             return f
-        if self.path == '/kvman/dump':
+        elif self.path == '/kvman/dump':
             with garage.mutex:
                 f = self.dict2file(garage.dump())
             return f
-#        if self.path == '/kvman/gooddump':
-#            with garage.mutex:
-#                f = self.str2file('{"main_mem": '+json.dumps(garage.main_mem)+', "time_stamp": "'+str(garage.get_time_stamp())+'"}')
-#                garage.clear_fail_backup()
-#            return f
-        if self.path == '/':
+        elif self.path == '/kvman/kvpaxos':
+            s=self.server.px.show_off()
+            #print(s)
+            return self.str2file('<br>\n'.join(s))
+        elif self.path == '/':
             return self.str2file('Test<br>Client address: '+str(self.client_address)+'<br>Thread: '+threading.currentThread().getName())
         p = urlparse(self.path)
-        #pattern = re.compile('/kv/get\?key=(?P<the_key>.+)')
-        #m = pattern.match(self.path)
         if p.path == '/kv/get':
             the_key = None
             the_requestid = None
@@ -117,9 +114,11 @@ class RHandler(BaseHTTPRequestHandler):
                             timeslp*=2
                         tmp_status = px.kv_status(seq)
                     ret = [None,None]
-                    ret[0] = px.action_status(seq) and tmp_status[0] # note that tmp_status might not be in format of get
-                    ret[1] = tmp_status[1]
-                    return  self.str2file('{"success":"'+str(ret[0]).lower()+'","value":'+json.dumps(ret[1])+'}')
+                    action_status = px.action_status(seq)
+                    if action_status:
+                        ret[0] = tmp_status[0] # note that tmp_status might not be in format of get, thus we need action_status
+                        ret[1] = tmp_status[1]
+                        return  self.str2file('{"success":"'+str(ret[0]).lower()+'","value":'+json.dumps(ret[1])+'}')
         return self.str2file('{"success":"false"}')
 
     def process_post_data(self):
@@ -213,8 +212,10 @@ class RHandler(BaseHTTPRequestHandler):
                         if timeslp<1.0:
                             timeslp*=2
                         tmp_status = px.kv_status(seq)
-                    ret = px.action_status(seq) and tmp_status # note tmp_status may not be insert's result
-                    return self.str2file('{"success":"'+str(ret).lower()+'"}')
+                    action_status = px.action_status(seq)
+                    if action_status:
+                        ret = tmp_status # note tmp_status may not be insert's result
+                        return self.str2file('{"success":"'+str(ret).lower()+'"}')
         return self.str2file('{"success":"false"}')
 
     def copyfile(self, source, outputfile):

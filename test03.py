@@ -14,7 +14,8 @@ def parse_output(r,k):
         return None
 
 class TestStringMethods(unittest.TestCase):
-    url = 'http://localhost:8001'
+    url = 'http://localhost:'
+    port = 8001
     path_insert='/kv/insert'
     path_update='/kv/update'
     path_delete='/kv/delete'
@@ -32,10 +33,14 @@ class TestStringMethods(unittest.TestCase):
             cnt+=1
         print(payload)
 
-    def testR(self):
-        requests.post(self.url+'/paxos/start',data={'msg0': 'propose', 'msg2': 4, 'msg1': 100})
+    def testinsert(self):
+        for i in range(21):
+            try:
+                requests.post(self.url+str(self.port+(i%3))+self.path_insert,data={'key': str(i+1), 'value': '_'})
+            except:
+                pass
 
-    def two(self):
+    def paxos(self):
         m=xpaxos.MessageHandler.MessageHandler(0,2)
         n=xpaxos.MessageHandler.MessageHandler(1,2)
         p1=n.propose()
