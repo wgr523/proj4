@@ -1,5 +1,5 @@
 How to run:
-python3 primary_server.py 1
+python3 primary_server.py 1。
 1 是 服务器号码，目前只支持123。
 看看conf，里边有ip地址。
 
