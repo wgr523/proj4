@@ -242,13 +242,14 @@ class MyPaxos(object):
             self.peer_buf.add(answerer)
             if lo<self.lo_buf:
                 self.lo_buf = lo
+        with self.mutex:
             if len(self.peer_buf) == self.size:
                 for i in range(self.lo_buf-1,-1,-1):
                     if not self.sequence[i]:
                         break
                     self.sequence[i]=None
                     print('trash seq='+str(i))
-                gc.collect()
+        gc.collect()
 #                if i >= len(self.sequence):
 #                    break
 #            for i in range(seq+1):
