@@ -37,6 +37,7 @@ class MyPaxos(object):
             t=threading.Thread(target = self.start, args=('(this should not be agreed)',i) )
             t.start()
             t.join() # correct?
+        self.done(end-1)
     def kill(self):
         self.dead = True
     def deal_with_msg(self,msg,seq):
@@ -78,8 +79,6 @@ class MyPaxos(object):
                 time.sleep(timeslp) # something like timeout
                 timeslp*=2
         print('As leader, Agree on '+msghdl.decided_value)
-        '''done, collect garbage'''
-        self.done(seq-1)
 
     def receive(self,msg,seq):
         flag_to_catch_up = self.get_max()+1, seq
@@ -158,6 +157,8 @@ class MyPaxos(object):
                 ret = garage.insert(the_key,the_value)
                 rw_lock.after_write()
                 self.sequence_result[seq]=ret
+            '''done, collect garbage'''
+            self.done(seq)
                 
 
     def status(self,seq):
@@ -204,8 +205,18 @@ class MyPaxos(object):
         return ret
     def done(self,seq):
         with self.lo_mutex:
-            if self.lo < seq+1:
-                self.lo=seq+1
+            l1=self.lo
+        for i in range(l1,seq+1):
+            with self.mutex:
+                msghdl = self.sequence[i]
+            if not msghdl.decided_value:
+                with self.lo_mutex:
+                    self.lo = i
+                break
+            if i==seq:
+                with self.lo_mutex:
+                    self.lo = seq+1
+        with self.lo_mutex:
             self.lo_buf = self.lo
             self.peer_buf = set([self.me])
         for i in range(self.size):
@@ -244,3 +255,11 @@ class MyPaxos(object):
 #                if i >= len(self.sequence):
 #                    break
 #                self.sequence[i]=None
+
+    def show_off(self):
+        s=['<h2>This is server '+str(self.me)+'</h2>\n<h3>paxos status:</h3>\n']
+        s.append('lo='+str(self.lo)+' , hi='+str(len(self.sequence)-1))
+        for i in range(self.lo,len(self.sequence)):
+            msghdl = self.sequence[i]
+            s.append(str(i)+': decided_value='+msghdl.decided_value+' , kv status='+str(self.sequence_result[i]))
+        return s
