@@ -23,9 +23,11 @@ class MessageHandler(object):
         self.quorum_size = (total_size)//2+1
 
     
-    def propose(self, v='failure value'):
+    def propose(self, v):
         self.leader              = False
+        self.commiter = False
         self.promises_received   = set()
+        self.acks_received = set()
         self.proposal_id         = self.choose_n()
         #self.highest_proposal_id = self.proposal_id # this may be useless cuz I'll send msg to my self via function call
         self.highest_buf = -1
@@ -41,10 +43,10 @@ class MessageHandler(object):
     def accept(self, msg): # aka receive promise
         if self.leader:
             return
-        if msg and msg[1] is not None and msg[2]==self.proposal_id:
+        if msg and msg[2]==self.proposal_id:
             self.promises_received.add(msg[1])
             #update
-            if msg[2]>self.highest_buf:
+            if msg[3]>self.highest_buf:
                 self.highest_buf = msg[3]
                 if len(msg)>=5:
                     self.value_buf = msg[4]
@@ -52,8 +54,6 @@ class MessageHandler(object):
                     self.value_buf = None
         if len(self.promises_received) >= self.quorum_size:
             self.leader = True
-            self.commiter = False
-            self.acks_received = set()
             if self.value_buf:
                 self.proposal_value = self.value_buf
             else:
@@ -70,7 +70,7 @@ class MessageHandler(object):
     def commit(self,msg): # aka receive ack
         if self.commiter:
             return
-        if msg and msg[2] == self.proposal_id and msg[1] is not None:
+        if msg and msg[2] == self.proposal_id:
             self.acks_received.add(msg[1])
         if len(self.acks_received) >= self.quorum_size:
             self.commiter = True

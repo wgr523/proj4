@@ -4,6 +4,7 @@ import os
 from time import sleep
 import xpaxos
 import threading
+import random
 def parse_output(r,k):
     if not r or not r.text:
         return None
@@ -35,18 +36,27 @@ class TestStringMethods(unittest.TestCase):
         print(payload)
     def todo(self, url, key, value):
         try:
-            requests.post(url,data={'key': key, 'value': value})
+            requests.post(url,data={'key': ''+key, 'value': value,'requestid':random.randint(0,10000000)})
         except:
-            pass
+            print('wrong')
 
     def testinsert(self):
         tt=[]
-        for i in range(21):
+        for i in range(56):
             t=threading.Thread(target=self.todo,args=(self.url+str(self.port+(i%3))+self.path_insert,str(i+1), '_'))
             t.start()
             tt.append(t)
         for t in tt:
             t.join()
+        try:
+            requests.get(self.url+str(self.port+(0))+self.path_get+'1')
+            requests.get(self.url+str(self.port+(1))+self.path_get+'1')
+            requests.get(self.url+str(self.port+(2))+self.path_get+'1')
+        except:
+            pass
+
+    def est111(self):
+        requests.get(self.url+str(self.port+(2))+self.path_get+'1&requestid='+str(random.randint(0,10000000)))
 
     def paxos(self):
         m=xpaxos.MessageHandler.MessageHandler(0,2)

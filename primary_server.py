@@ -8,6 +8,7 @@ import garage
 import xpaxos
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     """Handle requests in a separate thread."""
+    deadpool = False
     px = None
     def set_conf(self,list_of_address,me):
         self.px = xpaxos.MyPaxos.MyPaxos(list_of_address, me)

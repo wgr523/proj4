@@ -37,6 +37,8 @@ class RHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         """Serve a GET request."""
+        if self.server.deadpool and self.path != '/kvman/restart':
+            return
         f = self.simple_get()
         try:
             self.copyfile(f, self.wfile)
@@ -50,6 +52,8 @@ class RHandler(BaseHTTPRequestHandler):
             f.close()
 
     def do_POST(self):
+        if self.server.deadpool:
+            return        
         if self.path.startswith('/kv'):
             f = self.kv_post()
             try:
@@ -71,8 +75,10 @@ class RHandler(BaseHTTPRequestHandler):
                 f.close()
     
     def simple_get(self):
-        if self.path == '/kvman/shutdown':
-            pass # need to be implemented
+        if self.path == '/kvman/stop':
+            self.server.deadpool = True
+        if self.path == '/kvman/restart':
+            self.server.deadpool = False
 
         elif self.path == '/kvman/countkey':
             with garage.mutex:
@@ -107,16 +113,15 @@ class RHandler(BaseHTTPRequestHandler):
                     # wait for finish
                     timeslp=0.01
                     tmp_status = px.kv_status(seq)
-                    while tmp_status is None:
+                    while tmp_status is not None and not tmp_status['decided']:
                         time.sleep(timeslp) # something like timeout
                         if timeslp<1.0:
                             timeslp*=2
-                        tmp_status = px.kv_status(seq)
-                    ret = [None,None]
+                        tmp_status = px.status(seq)
                     action_status = px.action_status(seq)
                     if action_status:
-                        ret[0] = tmp_status[0] # note that tmp_status might not be in format of get, thus we need action_status
-                        ret[1] = tmp_status[1]
+                        px.do_kv_actions(seq)
+                        ret = px.kv_status(seq)# note that tmp_status might not be in format of get, thus we need action_status
                         garage.request_id_add(the_requestid)
                         return  self.str2file('{"success":"'+str(ret[0]).lower()+'","value":'+json.dumps(ret[1])+'}')
         return self.str2file('{"success":"false"}')
@@ -144,7 +149,7 @@ class RHandler(BaseHTTPRequestHandler):
                 if tmpinput[0].startswith('msg'):
                     tmpi = int(tmpinput[0][3:])
                     msg[tmpi] = unquote_plus(tmpinput[1]) # strip msg0=
-                elif tmpinput[0]=='seq' and tmpinput[1].isdecimal():
+                elif tmpinput[0]=='seq':# and tmpinput[1].isdecimal():
                     seq=int(tmpinput[1])
             if msg[0]=='propose':
                 msg[1]=int(msg[1])
@@ -201,20 +206,22 @@ class RHandler(BaseHTTPRequestHandler):
             if garage.request_id_test(the_requestid) and the_key and the_value:
                 payload={'action':'insert','key':the_key,'value':the_value,'requestid':the_requestid}
                 px = self.server.px
+                data=json.dumps(payload)
                 while True:
                     seq = px.get_max()+1
-                    px.start(json.dumps(payload),seq)
+                    px.start(data,seq)
                     # wait for finish
                     timeslp=0.01
-                    tmp_status = px.kv_status(seq)
-                    while tmp_status is None:
+                    tmp_status = px.status(seq)
+                    while tmp_status is not None and not tmp_status['decided']:
                         time.sleep(timeslp) # something like timeout
                         if timeslp<1.0:
                             timeslp*=2
-                        tmp_status = px.kv_status(seq)
+                        tmp_status = px.status(seq)
                     action_status = px.action_status(seq)
                     if action_status:
-                        ret = tmp_status # note tmp_status may not be insert's result
+                        px.do_kv_actions(seq)
+                        ret = px.kv_status(seq) # note tmp_status may not be insert's result
                         garage.request_id_add(the_requestid)
                         return self.str2file('{"success":"'+str(ret).lower()+'"}')
         return self.str2file('{"success":"false"}')

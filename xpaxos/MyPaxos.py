@@ -19,26 +19,28 @@ class MyPaxos(object):
     mutex = threading.RLock()
     lo_mutex = threading.RLock()
     lo_buf = 0
+    lo_of_none = 0
     peer_buf = set()
+    action_mutex = threading.RLock()
     def __init__(self, peers, me):
         self.peers = peers
         self.size = len(peers)
         self.me = me
 
     def allocate_sequence(self,seq):
-        with self.mutex:
-            length = seq-len(self.sequence)+1
-            for i in range(length):
-                self.sequence.append(MessageHandler(self.me,self.size))
-            self.sequence_result.extend([None]*length)
-            #self.hi = seq
+        length = seq-len(self.sequence)+1
+        for i in range(length):
+            self.sequence.append(MessageHandler(self.me,self.size))
+        self.sequence_result.extend([None]*length)
     def catchup_sequence(self,beg,end): #[beg,end)
+        tt=[]
         for i in range(beg,end):
-            t=threading.Thread(target = self.start, args=('(this should not be agreed)',i) )
-            t.start()
-            t.join() # correct?
-        if beg<end:
-            self.done(end-1)
+            if not self.sequence[i].decided_value:
+                t=threading.Thread(target = self.start, args=('{"action":"get","key":"ERROR: this instance is used to catch up"}',i) )
+                t.start()
+                tt.append(t)
+        #for t in tt:
+        #    t.join() # correct?
     def kill(self):
         self.dead = True
     def deal_with_msg(self,msg,seq):
@@ -51,8 +53,8 @@ class MyPaxos(object):
         return payload
 
     def start(self,v,seq):
-        self.allocate_sequence(seq)
         with self.mutex:
+            self.allocate_sequence(seq)
             msghdl = self.sequence[seq]
         if not msghdl:
             return
@@ -74,23 +76,23 @@ class MyPaxos(object):
                     except:
                         print(str(i)+' deny me')
             timeslp=0.01
-            for tmpcnt in range(7):
+            for tmpcnt in range(4):
                 if msghdl.decided_value or self.dead:
                     break
                 time.sleep(timeslp) # something like timeout
                 timeslp*=2
-        print('As leader, Agree on '+msghdl.decided_value)
+        print('As leader, agree on seq='+str(seq)+' , value= '+msghdl.decided_value)
 
     def receive(self,msg,seq):
-        flag_to_catch_up = self.get_max()+1, seq
-        self.allocate_sequence(seq)
-        self.catchup_sequence(flag_to_catch_up[0],flag_to_catch_up[1])
         with self.mutex:
+            #flag_to_catch_up = [self.get_max()+1, seq]
+            self.allocate_sequence(seq)
             msghdl = self.sequence[seq]
         if not msghdl:
             return
-        flag_to_do_action = msg[0]=='commit' and msghdl.decided_value is None
+        #flag_to_do_action = msghdl.decided_value is None
         reply = msghdl.receive(msg)
+        #flag_to_do_action &= msghdl.decided_value is not None
         if reply and reply[0]:
             payload = self.deal_with_msg(reply,seq)
             if reply[0]=='promise':
@@ -103,7 +105,7 @@ class MyPaxos(object):
                         requests.post(url,data=payload)
                     except:
                         print(str(msg[1])+' deny me') 
-            if reply[0]=='ack':
+            elif reply[0]=='ack':
                 if self.me == msg[1]: # special case for send msg to itself
                     self.receive(reply,seq)
                 else:
@@ -113,7 +115,7 @@ class MyPaxos(object):
                         requests.post(url,data=payload)
                     except:
                         print(str(msg[1])+' deny me') 
-            if reply[0]=='accept':
+            elif reply[0]=='accept':
                 self.receive(reply,seq)
                 path='/paxos/'+reply[0]
                 for i in range(self.size):
@@ -124,7 +126,7 @@ class MyPaxos(object):
                             requests.post(url,data=payload)
                         except:
                             print(str(i)+' deny me') 
-            if reply[0]=='commit':
+            elif reply[0]=='commit':
                 self.receive(reply,seq)
                 path='/paxos/'+reply[0]
                 for i in range(self.size):
@@ -135,29 +137,64 @@ class MyPaxos(object):
                             requests.post(url,data=payload)
                         except:
                             print(str(i)+' deny me')
-        elif flag_to_do_action:# msg[0]=='commit' I will have no reply but I should do something to kv
-            payload = json.loads(msg[2])
-            the_key = None
-            the_value = None
-            the_requestid=None
-            if 'key' in payload:
-                the_key = payload['key']
-            if 'value' in payload:
-                the_value = payload['value']
-            if 'requestid' in payload:
-                the_requestid= payload['requestid']
-            if payload['action']=='get':
-                rw_lock = garage.get_rw_create(the_key)
-                rw_lock.before_read()
-                ret = garage.get(the_key)
-                rw_lock.after_read()
-                self.sequence_result[seq]=ret
-            if payload['action']=='insert':
-                rw_lock = garage.get_rw_create(the_key)
-                rw_lock.before_write()
-                ret = garage.insert(the_key,the_value)
-                rw_lock.after_write()
-                self.sequence_result[seq]=ret
+#            elif reply[0]=='nuh':
+#                t_reply='commit',reply[1],reply[2]
+#                payload = self.deal_with_msg(t_reply,seq)
+#                if self.me == msg[1]: # special case for send msg to itself
+#                    self.receive(t_reply,seq)
+#                else:
+#                    url=self.peers[msg[1]]+'/paxos/'+reply[0]
+#                    try:
+#                        print(str(self.me)+' send a commit to '+str(msg[1]))
+#                        requests.post(url,data=payload)
+#                    except:
+#                        print(str(msg[1])+' deny me')
+    def do_kv_actions(self,seq):
+        end=seq+1#self.get_max()+1
+        with self.action_mutex:
+            beg=self.get_useful_min()
+            #self.catchup_sequence(beg,end)
+            for i in range(beg,end):
+                with self.mutex:
+                    msghdl = self.sequence[i]
+                ret = self.sequence_result[i]
+                if msghdl:
+                    if not msghdl.decided_value:
+                        time.sleep(0.5) # this is to minimize the error action below
+                        print('wait for '+str(i))
+                        self.start('{"action":"get","key":"ERROR: this instance is used to catch up"}',i)
+                        print('wait done for '+str(i)+' whose action is '+msghdl.decided_value)
+                    #timeslp=0.01
+                    #while not msghdl.decided_value and not self.dead:
+                    #    time.sleep(timeslp) # something like timeout
+                    #    if timeslp<1:
+                    #        timeslp*=2
+                    #if ret is not None:
+                    #    print('strange result '+str(i)+' '+str(ret))
+                    payload = json.loads(msghdl.decided_value)
+                    the_key = None
+                    the_value = None
+                    the_requestid=None
+                    if 'key' in payload:
+                        the_key = payload['key']
+                    if 'value' in payload:
+                        the_value = payload['value']
+                    if 'requestid' in payload:
+                        the_requestid= payload['requestid']
+                    if payload['action']=='get':
+                        rw_lock = garage.get_rw_create(the_key)
+                        rw_lock.before_read()
+                        ret = garage.get(the_key)
+                        rw_lock.after_read()
+                        self.sequence_result[i]=ret
+                    elif payload['action']=='insert':
+                        rw_lock = garage.get_rw_create(the_key)
+                        rw_lock.before_write()
+                        ret = garage.insert(the_key,the_value)
+                        rw_lock.after_write()
+                        self.sequence_result[i]=ret
+                else:
+                    print('do actions - error!!!')
             '''done, collect garbage'''
             self.done(seq)
                 
@@ -165,8 +202,9 @@ class MyPaxos(object):
     def status(self,seq):
         with self.mutex:
             if seq>=len(self.sequence):
-                return None
-            msghdl = self.sequence[seq]
+                msghdl = None
+            else:
+                msghdl = self.sequence[seq]
         if not msghdl:
             return None
         if msghdl.decided_value:
@@ -178,14 +216,16 @@ class MyPaxos(object):
     def kv_status(self,seq): # to see if kv action is done
         with self.mutex:
             if seq>=len(self.sequence):
-                return None
-            ret = self.sequence_result[seq]
+                ret = None
+            else:
+                ret = self.sequence_result[seq]
         return ret
     def action_status(self,seq): # to see if the action is done, or other action is done?
         with self.mutex:
             if seq>=len(self.sequence):
-                return False
-            msghdl = self.sequence[seq]
+                msghdl = None
+            else:
+                msghdl = self.sequence[seq]
         if not msghdl:
             return False
         return msghdl.potential_value == msghdl.decided_value
@@ -194,34 +234,23 @@ class MyPaxos(object):
         with self.mutex:
             ret = len(self.sequence)
         return ret-1
-        #return self.hi
     def get_min(self):
-#        tmp_seq = self.sequence
-#        for i in range(self.lo,len(tmp_seq)):
-#            if tmp_seq[i] is not None:
-#                self.lo=i
-#                break
         with self.lo_mutex:
             ret = self.lo_buf
         return ret
+    def get_useful_min(self):
+        with self.lo_mutex:
+            ret = self.lo
+        return ret
+    
     def done(self,seq):
-        if seq%10!=9:
+        with self.lo_mutex:
+            if self.lo<seq+1:
+                self.lo = seq+1
+            #self.lo_buf = self.lo
+            #self.peer_buf = set([self.me])
+        if True:#seq%10!=20:
             return
-        with self.lo_mutex:
-            l1=self.lo
-        for i in range(l1,seq+1):
-            with self.mutex:
-                msghdl = self.sequence[i]
-            if not msghdl.decided_value:
-                with self.lo_mutex:
-                    self.lo = i
-                break
-            if i==seq:
-                with self.lo_mutex:
-                    self.lo = seq+1
-        with self.lo_mutex:
-            self.lo_buf = self.lo
-            self.peer_buf = set([self.me])
         for i in range(self.size):
             if self.me != i:
                 url=self.peers[i]+'/paxos/done/ask'
@@ -253,17 +282,13 @@ class MyPaxos(object):
                     self.sequence[i]=None
                     print('trash seq='+str(i))
         gc.collect()
-#                if i >= len(self.sequence):
-#                    break
-#            for i in range(seq+1):
-#                if i >= len(self.sequence):
-#                    break
-#                self.sequence[i]=None
 
     def show_off(self):
+        beg=self.get_min()
+        end=self.get_max()
         s=['<h2>This is server '+str(self.me)+'</h2>\n<h3>paxos status:</h3>\n']
-        s.append('lo='+str(self.lo)+' , hi='+str(len(self.sequence)-1))
-        for i in range(self.lo,len(self.sequence)):
+        s.append('lo='+str(beg)+' , hi='+str(end)+' , useful lo='+str(self.get_useful_min()))
+        for i in range(beg,end+1):
             msghdl = self.sequence[i]
             s.append(str(i)+': decided_value='+msghdl.decided_value+' , kv status='+str(self.sequence_result[i]))
         return s
