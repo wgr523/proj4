@@ -151,19 +151,24 @@ class MyPaxos(object):
 #                        print(str(msg[1])+' deny me')
     def do_kv_actions(self,seq):
         end=seq+1#self.get_max()+1
+        timeslp=0.25
         with self.action_mutex:
             beg=self.get_useful_min()
-            #self.catchup_sequence(beg,end)
             for i in range(beg,end):
                 with self.mutex:
                     msghdl = self.sequence[i]
                 ret = self.sequence_result[i]
                 if msghdl:
                     if not msghdl.decided_value:
-                        time.sleep(0.5) # this is to minimize the error action below
-                        print('wait for '+str(i))
-                        self.start('{"action":"get","key":"ERROR: this instance is used to catch up"}',i)
-                        print('wait done for '+str(i)+' whose action is '+msghdl.decided_value)
+                        if timeslp:
+                            time.sleep(timeslp) # this is to minimize the error action below
+                        if not msghdl.decided_value:
+                            timeslp/=2
+                            if timeslp<0.001:
+                                timeslp=0
+                            print('wait for '+str(i))
+                            self.start('{"action":"get","key":"ERROR: this instance is used to catch up"}',i)
+                            print('wait done for '+str(i)+' whose action is '+msghdl.decided_value)
                     #timeslp=0.01
                     #while not msghdl.decided_value and not self.dead:
                     #    time.sleep(timeslp) # something like timeout
@@ -236,7 +241,7 @@ class MyPaxos(object):
         return ret-1
     def get_min(self):
         with self.lo_mutex:
-            ret = self.lo_buf
+            ret = self.lo_of_none
         return ret
     def get_useful_min(self):
         with self.lo_mutex:
@@ -247,25 +252,22 @@ class MyPaxos(object):
         with self.lo_mutex:
             if self.lo<seq+1:
                 self.lo = seq+1
-            #self.lo_buf = self.lo
-            #self.peer_buf = set([self.me])
-        if True:#seq%10!=20:
-            return
+        with self.lo_mutex:
+            self.lo_buf = self.lo
+            self.peer_buf = set([self.me])
         for i in range(self.size):
             if self.me != i:
                 url=self.peers[i]+'/paxos/done/ask'
                 try:
                     print(str(self.me)+' send a done number ask to '+str(i))
-                    requests.post(url,data={'asker':self.me})
+                    requests.post(url,data={'asker':str(self.me)})
                 except:
                     print(str(i)+' deny me')
     def answer_done(self,asker):
-        with self.lo_mutex:
-            ret = self.lo
-        url=self.peers[asker]+'/paxos/done/answer'
-        payload={'answerer':self.me,'min':ret}
+        url = self.peers[asker]+'/paxos/done/answer'
+        payload={'answerer':str(self.me),'min':str(self.get_useful_min())}
         try:
-            print(str(self.me)+' send a done number answer to '+str(asker)+', value is '+str(ret))
+            print(str(self.me)+' send a done number answer to '+str(asker)+', value is '+str(self.get_useful_min()))
             requests.post(url,data=payload)
         except:
             print(str(asker)+' deny me')
@@ -274,14 +276,17 @@ class MyPaxos(object):
             self.peer_buf.add(answerer)
             if lo<self.lo_buf:
                 self.lo_buf = lo
-        with self.mutex:
-            if len(self.peer_buf) == self.size:
-                for i in range(self.lo_buf-1,-1,-1):
-                    if not self.sequence[i]:
-                        break
+        if len(self.peer_buf) == self.size:
+            with self.lo_mutex:
+                beg=self.lo_of_none
+                end=self.lo_buf
+            with self.mutex:
+                for i in range(beg,end):
                     self.sequence[i]=None
                     print('trash seq='+str(i))
-        gc.collect()
+            with self.lo_mutex:
+                self.lo_of_none = self.lo_buf
+            gc.collect()
 
     def show_off(self):
         beg=self.get_min()

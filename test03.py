@@ -36,13 +36,13 @@ class TestStringMethods(unittest.TestCase):
         print(payload)
     def todo(self, url, key, value):
         try:
-            requests.post(url,data={'key': ''+key, 'value': value,'requestid':random.randint(0,10000000)})
+            requests.post(url,data={'key': '1'+key, 'value': value,'requestid':random.randint(0,10000000)})
         except:
             print('wrong')
 
     def testinsert(self):
         tt=[]
-        for i in range(56):
+        for i in range(36):
             t=threading.Thread(target=self.todo,args=(self.url+str(self.port+(i%3))+self.path_insert,str(i+1), '_'))
             t.start()
             tt.append(t)
