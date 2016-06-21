@@ -169,13 +169,6 @@ class MyPaxos(object):
                             print('wait for '+str(i))
                             self.start('{"action":"get","key":"ERROR: this instance is used to catch up"}',i)
                             print('wait done for '+str(i)+' whose action is '+msghdl.decided_value)
-                    #timeslp=0.01
-                    #while not msghdl.decided_value and not self.dead:
-                    #    time.sleep(timeslp) # something like timeout
-                    #    if timeslp<1:
-                    #        timeslp*=2
-                    #if ret is not None:
-                    #    print('strange result '+str(i)+' '+str(ret))
                     payload = json.loads(msghdl.decided_value)
                     the_key = None
                     the_value = None
@@ -198,6 +191,18 @@ class MyPaxos(object):
                         ret = garage.insert(the_key,the_value)
                         rw_lock.after_write()
                         self.sequence_result[i]=ret
+                    elif payload['action']=='delete':
+                        rw_lock = garage.get_rw_create(the_key)
+                        rw_lock.before_write()
+                        ret = garage.delete(the_key)
+                        rw_lock.after_write()
+                        self.sequence_result[i]=ret
+                    elif payload['action']=='update':
+                        rw_lock = garage.get_rw_create(the_key)
+                        rw_lock.before_write()
+                        ret = garage.update(the_key,the_value)
+                        rw_lock.after_write()
+                        self.sequence_result[i]=ret
                 else:
                     print('do actions - error!!!')
             '''done, collect garbage'''
@@ -218,14 +223,14 @@ class MyPaxos(object):
             decided = False
         return {'decided':decided,'v':msghdl.decided_value}
     
-    def kv_status(self,seq): # to see if kv action is done
+    def kv_status(self,seq):
         with self.mutex:
             if seq>=len(self.sequence):
                 ret = None
             else:
                 ret = self.sequence_result[seq]
         return ret
-    def action_status(self,seq): # to see if the action is done, or other action is done?
+    def action_status(self,seq): # to see if it is the action we need
         with self.mutex:
             if seq>=len(self.sequence):
                 msghdl = None
@@ -252,6 +257,9 @@ class MyPaxos(object):
         with self.lo_mutex:
             if self.lo<seq+1:
                 self.lo = seq+1
+            tmp = self.lo-self.lo_of_none
+        if tmp<10: # 10 is some parameter, how large should it be?
+            return
         with self.lo_mutex:
             self.lo_buf = self.lo
             self.peer_buf = set([self.me])

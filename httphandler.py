@@ -221,6 +221,50 @@ class RHandler(BaseHTTPRequestHandler):
                     action_status = px.action_status(seq)
                     if action_status:
                         px.do_kv_actions(seq)
+                        ret = px.kv_status(seq)
+                        garage.request_id_add(the_requestid)
+                        return self.str2file('{"success":"'+str(ret).lower()+'"}')
+        if self.path == '/kv/delete':
+            if garage.request_id_test(the_requestid) and the_key:
+                payload={'action':'delete','key':the_key,'requestid':the_requestid}
+                px = self.server.px
+                data=json.dumps(payload)
+                while True:
+                    seq = px.get_max()+1
+                    px.start(data,seq)
+                    # wait for finish
+                    timeslp=0.01
+                    tmp_status = px.status(seq)
+                    while tmp_status is not None and not tmp_status['decided']:
+                        time.sleep(timeslp) # something like timeout
+                        if timeslp<1.0:
+                            timeslp*=2
+                        tmp_status = px.status(seq)
+                    action_status = px.action_status(seq)
+                    if action_status:
+                        px.do_kv_actions(seq)
+                        ret = px.kv_status(seq)
+                        garage.request_id_add(the_requestid)
+                        return self.str2file('{"success":"'+str(ret[0]).lower()+'","value":"'+ret[1]+'"}')
+        if self.path == '/kv/update':
+            if garage.request_id_test(the_requestid) and the_key and the_value:
+                payload={'action':'update','key':the_key,'value':the_value,'requestid':the_requestid}
+                px = self.server.px
+                data=json.dumps(payload)
+                while True:
+                    seq = px.get_max()+1
+                    px.start(data,seq)
+                    # wait for finish
+                    timeslp=0.01
+                    tmp_status = px.status(seq)
+                    while tmp_status is not None and not tmp_status['decided']:
+                        time.sleep(timeslp) # something like timeout
+                        if timeslp<1.0:
+                            timeslp*=2
+                        tmp_status = px.status(seq)
+                    action_status = px.action_status(seq)
+                    if action_status:
+                        px.do_kv_actions(seq)
                         ret = px.kv_status(seq) # note tmp_status may not be insert's result
                         garage.request_id_add(the_requestid)
                         return self.str2file('{"success":"'+str(ret).lower()+'"}')
