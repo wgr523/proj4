@@ -93,7 +93,7 @@ class RHandler(BaseHTTPRequestHandler):
             #print(s)
             return self.str2file('<br>\n'.join(s))
         elif self.path == '/':
-            return self.str2file('Test<br>Client address: '+str(self.client_address)+'<br>Thread: '+threading.currentThread().getName())
+            return self.str2file('This address: '+str(self.server.server_address)+'<br>Client address: '+str(self.client_address)+'<br>Thread: '+threading.currentThread().getName())
         p = urlparse(self.path)
         if p.path == '/kv/get':
             the_key = None

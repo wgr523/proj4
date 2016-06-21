@@ -265,9 +265,10 @@ class MyPaxos(object):
                     print(str(i)+' deny me')
     def answer_done(self,asker):
         url = self.peers[asker]+'/paxos/done/answer'
-        payload={'answerer':str(self.me),'min':str(self.get_useful_min())}
+        lo=self.get_useful_min()
+        payload={'answerer':str(self.me),'min':str(lo)}
         try:
-            print(str(self.me)+' send a done number answer to '+str(asker)+', value is '+str(self.get_useful_min()))
+            print(str(self.me)+' send a done number answer to '+str(asker)+', value is '+str(lo))
             requests.post(url,data=payload)
         except:
             print(str(asker)+' deny me')
