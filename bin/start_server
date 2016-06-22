@@ -1,3 +1,1 @@
-#!/bin/sh
-nohup python3 -u primary_server.py $1 > conf/$1.log 2>&1&
-echo $! > conf/$1.pid
+python3 server_manager.py start n01

@@ -1,4 +1,1 @@
-#!/bin/sh
-kill -9 `cat conf/$1.pid`
-rm conf/$1.pid
-
+python3 server_manager.py kill n01
