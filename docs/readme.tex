@@ -52,5 +52,7 @@ To test request id, see the code \verb|test_kv_strange.py|. With same request id
 
 Code is \verb|test_kv_2.py|. (Almost same as \verb|test_kv.py|). This runs lots of insert, update, delete, get, concurrently. And from output of the program we can see most of them are success. But because there may be too many threads, some requests may timeout, thus server don't accept them. But the accepted ones are of consensus and executed correctly. We can check {\tt /kvman/countkey}, {\tt /kvman/dump}, and even {\tt /kvman/kvpaxos} to check the key-value storage is correct and consistent.
 
+\section{Some issus}
+I handle the request id as a string. So if someone use 001 and 1 as id, I think they are different. But I think it is a minor problem and if someone insists using 001 (as a string for POST or GET) I would say that it is really boring.
 \end{document}
 

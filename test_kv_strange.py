@@ -30,7 +30,7 @@ class TestKV(unittest.TestCase):
             self.size = len(self.list_of_address_long)
 
     def action(self, url, key, value):
-        return requests.post(url,data={'key': 'e'+key, 'value': value,'requestid':41850})
+        return requests.post(url,data={'key': 'e'+key, 'value': value,'requestid':'41850'})
     
     def onekey(self,i):
         i=int(i)
