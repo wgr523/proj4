@@ -112,7 +112,7 @@ class RHandler(BaseHTTPRequestHandler):
                     px.start(json.dumps(payload),seq)
                     # wait for finish
                     timeslp=0.01
-                    tmp_status = px.kv_status(seq)
+                    tmp_status = px.status(seq)
                     while tmp_status is not None and not tmp_status['decided']:
                         time.sleep(timeslp) # something like timeout
                         if timeslp<1.0:

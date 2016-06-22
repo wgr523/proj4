@@ -1,0 +1,5 @@
+bin/start_server n01
+bin/start_server n02
+bin/start_server n03
+bin/start_server n04
+bin/start_server n05

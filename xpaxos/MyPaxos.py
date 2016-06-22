@@ -294,7 +294,8 @@ class MyPaxos(object):
                     self.sequence[i]=None
                     print('trash seq='+str(i))
             with self.lo_mutex:
-                self.lo_of_none = self.lo_buf
+                if self.lo_of_none < end:
+                    self.lo_of_none = end
             gc.collect()
 
     def show_off(self):
@@ -304,5 +305,8 @@ class MyPaxos(object):
         s.append('lo='+str(beg)+' , hi='+str(end)+' , useful lo='+str(self.get_useful_min()))
         for i in range(beg,end+1):
             msghdl = self.sequence[i]
-            s.append(str(i)+': decided_value='+msghdl.decided_value+' , kv status='+str(self.sequence_result[i]))
+            if msghdl:
+                s.append(str(i)+': decided_value='+msghdl.decided_value+' , kv status='+str(self.sequence_result[i]))
+            else:
+                s.append('Err, instance is null.')
         return s
