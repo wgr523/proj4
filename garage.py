@@ -82,6 +82,16 @@ def dump():
 def set_main_mem(_main_mem):
     main_mem.clear()
     main_mem.update(_main_mem)
+def request_id_add(rid):
+    if rid is None:
+        return True
+    with requestid_mutex:
+        if rid not in requestid_mem:
+            requestid_mem.add(rid)
+            ret = True
+        else:
+            ret = False
+    return ret
 def request_id_test(rid):
     if rid is None:
         return True
@@ -91,7 +101,3 @@ def request_id_test(rid):
         else:
             ret = False
     return ret
-def request_id_add(rid):
-    if rid:
-        with requestid_mutex:
-            requestid_mem.add(rid)

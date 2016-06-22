@@ -1,0 +1,56 @@
+\documentclass{article}
+\usepackage{indentfirst}
+
+\begin{document}
+
+\title{Document of Project 4}
+\author{Team of Wang Gerui and Xiang Pengda\\ written by Wang Gerui}
+\date{\today}
+\maketitle
+
+\section{How to run the code (in Unix)}
+
+As requested, you can run
+\begin{itemize}
+	\item \verb|bin/start_server n01|
+	\item \verb|bin/stop_server n01|
+\end{itemize}
+where start means start OR restart.
+You can also run the following python3 command:
+\begin{itemize}
+	\item \verb|python3 server_manager.py starta|
+	\item \verb|python3 server_manager.py stopa|
+	\item \verb|python3 server_manager.py restarta|
+	\item \verb|python3 server_manager.py killa|
+\end{itemize}
+the `a' in the end means for all servers.
+You can also run the following for single node:
+\begin{itemize}
+	\item \verb|python3 server_manager.py start n01|
+	\item \verb|python3 server_manager.py stop n01|
+	\item \verb|python3 server_manager.py kill n01|
+\end{itemize}
+the first two is almost same as scripts in {\tt /bin}.
+
+\section{Test for paxos}
+
+First, we write a message handler (aka a paxos instance) to produce the correct message of paxos. Test code is in \verb|test_paxos.py|.
+
+Then, we do the consensus when running the kv servers. Code is in \verb|test_kv.py|. We write a page whose path of url is {\tt /kvman/kvpaxos} to show the entire sequence of paxos instances. And we can open that path in different servers to check whether they have consensus. To be more specific, we don't care about anything with key-value storage, we just let them agree on the order of actions, and at last, we check {\tt /kvman/kvpaxos}. An example of one server's page is in {\tt kvpaxos.html}. Look at the decided value and see if every server have consensus on every instance.
+
+Above, we run all servers. Say we have 5 servers. We also test that 1 or 2 of them is stoped and restarted. Just restart (before any action), they won't catch up. Then we do any action to provoke a new consensus, the server will first catch up and do this action. This is by stop a server and run \verb|test_kv.py| and restart that server and do some simple action like get.
+
+Of course, when more than half are disconnected, e.g. only one server is alive, we can test paxos by do some action, and it will go round 1,2,3,$\cdots$ and never stops.
+
+To test forget about instance, we can see this path {\tt /kvman/kvpaxos} and check how much has been forgotten.
+
+To test request id, see the code \verb|test_kv_strange.py|. With same request id, the actions may be agreed because we don't have a global request id record. But when actions are in consensus, we can ignore the actions with same request id. Thus don't execute them.
+
+\paragraph{Note about forget step} How to modify forget step? In {\tt xpaxos/MyPaxos.py}, find the line with ``the step about forget'', and change the if-return clause to change the step. Default is 10. And we can even let it always return to unable forget, which is useful when checking paxos instances.
+
+\section{Test for kv server}
+
+Code is \verb|test_kv_2.py|. (Almost same as \verb|test_kv.py|). This runs lots of insert, update, delete, get, concurrently. And from output of the program we can see most of them are success. But because there may be too many threads, some requests may timeout, thus server don't accept them. But the accepted ones are of consensus and executed correctly. We can check {\tt /kvman/countkey}, {\tt /kvman/dump}, and even {\tt /kvman/kvpaxos} to check the key-value storage is correct and consistent.
+
+\end{document}
+

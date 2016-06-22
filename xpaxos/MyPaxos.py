@@ -32,15 +32,6 @@ class MyPaxos(object):
         for i in range(length):
             self.sequence.append(MessageHandler(self.me,self.size))
         self.sequence_result.extend([None]*length)
-    def catchup_sequence(self,beg,end): #[beg,end)
-        tt=[]
-        for i in range(beg,end):
-            if not self.sequence[i].decided_value:
-                t=threading.Thread(target = self.start, args=('{"action":"get","key":"ERROR: this instance is used to catch up"}',i) )
-                t.start()
-                tt.append(t)
-        #for t in tt:
-        #    t.join() # correct?
     def kill(self):
         self.dead = True
     def deal_with_msg(self,msg,seq):
@@ -85,14 +76,11 @@ class MyPaxos(object):
 
     def receive(self,msg,seq):
         with self.mutex:
-            #flag_to_catch_up = [self.get_max()+1, seq]
             self.allocate_sequence(seq)
             msghdl = self.sequence[seq]
         if not msghdl:
             return
-        #flag_to_do_action = msghdl.decided_value is None
         reply = msghdl.receive(msg)
-        #flag_to_do_action &= msghdl.decided_value is not None
         if reply and reply[0]:
             payload = self.deal_with_msg(reply,seq)
             if reply[0]=='promise':
@@ -150,7 +138,7 @@ class MyPaxos(object):
 #                    except:
 #                        print(str(msg[1])+' deny me')
     def do_kv_actions(self,seq):
-        end=seq+1#self.get_max()+1
+        end=seq+1
         timeslp=0.25
         with self.action_mutex:
             beg=self.get_useful_min()
@@ -180,29 +168,33 @@ class MyPaxos(object):
                     if 'requestid' in payload:
                         the_requestid= payload['requestid']
                     if payload['action']=='get':
-                        rw_lock = garage.get_rw_create(the_key)
-                        rw_lock.before_read()
-                        ret = garage.get(the_key)
-                        rw_lock.after_read()
-                        self.sequence_result[i]=ret
+                        if garage.request_id_add(the_requestid):
+                            rw_lock = garage.get_rw_create(the_key)
+                            rw_lock.before_read()
+                            ret = garage.get(the_key)
+                            rw_lock.after_read()
+                            self.sequence_result[i]=ret
                     elif payload['action']=='insert':
-                        rw_lock = garage.get_rw_create(the_key)
-                        rw_lock.before_write()
-                        ret = garage.insert(the_key,the_value)
-                        rw_lock.after_write()
-                        self.sequence_result[i]=ret
+                        if garage.request_id_add(the_requestid):
+                            rw_lock = garage.get_rw_create(the_key)
+                            rw_lock.before_write()
+                            ret = garage.insert(the_key,the_value)
+                            rw_lock.after_write()
+                            self.sequence_result[i]=ret
                     elif payload['action']=='delete':
-                        rw_lock = garage.get_rw_create(the_key)
-                        rw_lock.before_write()
-                        ret = garage.delete(the_key)
-                        rw_lock.after_write()
-                        self.sequence_result[i]=ret
+                        if garage.request_id_add(the_requestid):
+                            rw_lock = garage.get_rw_create(the_key)
+                            rw_lock.before_write()
+                            ret = garage.delete(the_key)
+                            rw_lock.after_write()
+                            self.sequence_result[i]=ret
                     elif payload['action']=='update':
-                        rw_lock = garage.get_rw_create(the_key)
-                        rw_lock.before_write()
-                        ret = garage.update(the_key,the_value)
-                        rw_lock.after_write()
-                        self.sequence_result[i]=ret
+                        if garage.request_id_add(the_requestid):
+                            rw_lock = garage.get_rw_create(the_key)
+                            rw_lock.before_write()
+                            ret = garage.update(the_key,the_value)
+                            rw_lock.after_write()
+                            self.sequence_result[i]=ret
                 else:
                     print('do actions - error!!!')
             '''done, collect garbage'''
@@ -258,6 +250,7 @@ class MyPaxos(object):
             if self.lo<seq+1:
                 self.lo = seq+1
             tmp = self.lo-self.lo_of_none
+        '''the step about forget'''
         if tmp<10: # 10 is some parameter, how large should it be?
             return
         with self.lo_mutex:

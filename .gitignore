@@ -4,3 +4,6 @@
 nohup.out
 *.log
 *.pid
+*.aux
+*.pdf
+*.html

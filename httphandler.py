@@ -75,11 +75,10 @@ class RHandler(BaseHTTPRequestHandler):
                 f.close()
     
     def simple_get(self):
-        if self.path == '/kvman/stop':
+        if self.path == '/kvman/stop' or self.path == '/kvman/shutdown':
             self.server.deadpool = True
-        if self.path == '/kvman/restart':
+        elif self.path == '/kvman/restart':
             self.server.deadpool = False
-
         elif self.path == '/kvman/countkey':
             with garage.mutex:
                 f = self.str2file('{"result": "'+str(garage.countkey())+'"}')
@@ -93,7 +92,7 @@ class RHandler(BaseHTTPRequestHandler):
             #print(s)
             return self.str2file('<br>\n'.join(s))
         elif self.path == '/':
-            return self.str2file('This address: '+str(self.server.server_address)+'<br>Client address: '+str(self.client_address)+'<br>Thread: '+threading.currentThread().getName())
+            return self.str2file('Pid= '+str(os.getpid())+'<br>This address: '+str(self.server.server_address)+'<br>Client address: '+str(self.client_address)+'<br>Thread: '+threading.currentThread().getName())
         p = urlparse(self.path)
         if p.path == '/kv/get':
             the_key = None
@@ -122,7 +121,7 @@ class RHandler(BaseHTTPRequestHandler):
                     if action_status:
                         px.do_kv_actions(seq)
                         ret = px.kv_status(seq)# note that tmp_status might not be in format of get, thus we need action_status
-                        garage.request_id_add(the_requestid)
+                        #garage.request_id_add(the_requestid)
                         return  self.str2file('{"success":"'+str(ret[0]).lower()+'","value":'+json.dumps(ret[1])+'}')
         return self.str2file('{"success":"false"}')
 
@@ -222,7 +221,7 @@ class RHandler(BaseHTTPRequestHandler):
                     if action_status:
                         px.do_kv_actions(seq)
                         ret = px.kv_status(seq)
-                        garage.request_id_add(the_requestid)
+                        #garage.request_id_add(the_requestid) rid test have did this
                         return self.str2file('{"success":"'+str(ret).lower()+'"}')
         if self.path == '/kv/delete':
             if garage.request_id_test(the_requestid) and the_key:
@@ -244,7 +243,7 @@ class RHandler(BaseHTTPRequestHandler):
                     if action_status:
                         px.do_kv_actions(seq)
                         ret = px.kv_status(seq)
-                        garage.request_id_add(the_requestid)
+                        #garage.request_id_add(the_requestid)
                         return self.str2file('{"success":"'+str(ret[0]).lower()+'","value":"'+ret[1]+'"}')
         if self.path == '/kv/update':
             if garage.request_id_test(the_requestid) and the_key and the_value:
@@ -266,7 +265,7 @@ class RHandler(BaseHTTPRequestHandler):
                     if action_status:
                         px.do_kv_actions(seq)
                         ret = px.kv_status(seq) # note tmp_status may not be insert's result
-                        garage.request_id_add(the_requestid)
+                        #garage.request_id_add(the_requestid)
                         return self.str2file('{"success":"'+str(ret).lower()+'"}')
         return self.str2file('{"success":"false"}')
 

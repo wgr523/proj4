@@ -13,7 +13,7 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
     def set_conf(self,list_of_address,me):
         self.px = xpaxos.MyPaxos.MyPaxos(list_of_address, me)
 
-def run(handler_class, me):
+def run(handler_class, me): # me starts with 1
     with open('conf/settings.conf') as f:
         settings = json.load(f)
         list_of_address=[]
